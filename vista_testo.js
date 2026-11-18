@@ -391,7 +391,15 @@
     nodoSvg("stop", { offset: "1", "stop-color": "#21190a" }, gradQui);
     nodoSvg("rect", { width: "100%", height: "100%", fill: "url(#m-griglia)" }, svg);
 
-    const mondo = nodoSvg("g", { transform: `translate(${ox.toFixed(1)} ${oy.toFixed(1)})` }, svg);
+    // quando ci si sposta la mappa torna sul luogo attuale (lo zoom resta)
+    if (VM.luogo !== st.luogo) {
+      VM.luogo = st.luogo;
+      VM.dx = 0;
+      VM.dy = 0;
+    }
+    const mondo = nodoSvg("g", {}, svg);
+    VM.disegno = { mondo, vw, vh, ox, oy, s, larg, alt };
+    applicaVistaMappa();
     const linee = nodoSvg("g", {}, mondo);
     const fatti = new Set();
     for (const id of ids) {
@@ -453,12 +461,119 @@
         scriviNome(g, c.x, c.y + 13, l.nome, W - 12);
       }
       if (dir) {
-        g.addEventListener("click", () => {
+        g.addEventListener("click", (ev) => {
+          if (ev.detail > 1) return;
           if (!S.inCorso) esegui("vai " + dir);
         });
       }
     }
   }
+
+  // ------------------------------------- mappa: trascina, zoom, ricentra
+  const VM = { dx: 0, dy: 0, zoom: 1, luogo: null, disegno: null };
+  const ZOOM_MAPPA = [0.4, 2.5];
+
+  function applicaVistaMappa() {
+    const d = VM.disegno;
+    if (!d) return;
+    const cx = d.vw / 2;
+    const cy = d.vh / 2;
+    // la mappa non può sparire del tutto fuori dal riquadro
+    const lim = (v, centro, dim, vista) => {
+      const max = dim / 2 + (vista / 2 - 30) / VM.zoom;
+      const c = Math.max(centro - max, Math.min(centro + max, v + dim / 2));
+      return c - dim / 2;
+    };
+    VM.dx = lim(d.ox + VM.dx, cx, d.larg, d.vw) - d.ox;
+    VM.dy = lim(d.oy + VM.dy, cy, d.alt, d.vh) - d.oy;
+    const tx = d.ox + VM.dx;
+    const ty = d.oy + VM.dy;
+    d.mondo.setAttribute(
+      "transform",
+      `translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${VM.zoom.toFixed(3)}) translate(${(tx - cx).toFixed(1)} ${(ty - cy).toFixed(1)})`
+    );
+  }
+
+  (function interazioneMappa() {
+    const el = $("mappa");
+    if (!el) return;
+    let presa = null;
+    let trascinato = false;
+
+    el.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0 || !VM.disegno) return;
+      presa = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, dx: VM.dx, dy: VM.dy };
+      trascinato = false;
+    });
+    el.addEventListener("pointermove", (ev) => {
+      if (!presa || ev.pointerId !== presa.id) return;
+      const mx = ev.clientX - presa.x;
+      const my = ev.clientY - presa.y;
+      if (!trascinato && Math.hypot(mx, my) < 5) return;
+      if (!trascinato) {
+        trascinato = true;
+        try {
+          el.setPointerCapture(ev.pointerId);
+        } catch (e) {
+          /* puntatore non più attivo */
+        }
+        el.classList.add("trascina");
+      }
+      const k = VM.disegno.s * VM.zoom;
+      VM.dx = presa.dx + mx / k;
+      VM.dy = presa.dy + my / k;
+      applicaVistaMappa();
+    });
+    const lascia = (ev) => {
+      if (!presa || ev.pointerId !== presa.id) return;
+      presa = null;
+      el.classList.remove("trascina");
+    };
+    el.addEventListener("pointerup", lascia);
+    el.addEventListener("pointercancel", lascia);
+    // dopo un trascinamento il rilascio non deve contare come clic su un luogo
+    el.addEventListener(
+      "click",
+      (ev) => {
+        if (!trascinato) return;
+        trascinato = false;
+        ev.stopPropagation();
+        ev.preventDefault();
+      },
+      true
+    );
+
+    el.addEventListener(
+      "wheel",
+      (ev) => {
+        const d = VM.disegno;
+        if (!d) return;
+        ev.preventDefault();
+        const nuovo = Math.max(ZOOM_MAPPA[0], Math.min(ZOOM_MAPPA[1], VM.zoom * Math.exp(-ev.deltaY * 0.0015)));
+        if (nuovo === VM.zoom) return;
+        // lo zoom resta fermo sul punto sotto il cursore
+        const r = el.getBoundingClientRect();
+        const q = { x: (ev.clientX - r.left) / d.s, y: (ev.clientY - r.top) / d.s };
+        const cx = d.vw / 2;
+        const cy = d.vh / 2;
+        const wx = (q.x - cx) / VM.zoom + cx - (d.ox + VM.dx);
+        const wy = (q.y - cy) / VM.zoom + cy - (d.oy + VM.dy);
+        VM.zoom = nuovo;
+        VM.dx = (q.x - cx) / nuovo + cx - wx - d.ox;
+        VM.dy = (q.y - cy) / nuovo + cy - wy - d.oy;
+        applicaVistaMappa();
+      },
+      { passive: false }
+    );
+
+    el.addEventListener("dblclick", (ev) => {
+      ev.preventDefault();
+      VM.dx = 0;
+      VM.dy = 0;
+      VM.zoom = 1;
+      applicaVistaMappa();
+    });
+  })();
 
   // la mappa si ridisegna quando il riquadro cambia dimensione
   if (typeof ResizeObserver !== "undefined") {
