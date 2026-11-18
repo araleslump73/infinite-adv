@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avventura Infinita</title>
+  <link rel="stylesheet" href="stile.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="marca">
+        <h1>Avventura Infinita</h1>
+        <span class="sotto">un mondo che cambia mentre lo scrivi</span>
+      </div>
+      <div class="badge" id="badge-ai" title="Chi sta raccontando il mondo">AI: …</div>
+      <div class="azioni-head">
+        <button id="btn-vista" type="button" class="fantasma" title="Passa da grafica a solo testo (G)">Solo testo</button>
+        <div class="menu" id="menu-partita">
+          <button id="btn-menu" type="button" class="fantasma" aria-haspopup="true" aria-expanded="false" aria-controls="menu-tendina">
+            <span aria-hidden="true">☰</span> Partita
+          </button>
+          <div class="menu-tendina" id="menu-tendina" role="menu" hidden>
+            <button id="btn-nuova" type="button" role="menuitem">Nuova avventura</button>
+            <button id="btn-salva" type="button" role="menuitem">Salva</button>
+            <button id="btn-carica" type="button" role="menuitem">Carica salvataggio</button>
+            <button id="btn-esporta" type="button" role="menuitem">Esporta in JSON</button>
+            <hr>
+            <label class="interruttore" title="Suoni sintetizzati nel browser">
+              <input type="checkbox" id="chk-suoni" checked>
+              <span>Suoni</span>
+            </label>
+            <label class="scelta-grafica" title="Quanto dettaglio grafico chiedere all'AI: vale per i prossimi luoghi">
+              <span>Grafica</span>
+              <select class="sel-grafica" id="sel-grafica">
+                <option value="avanzata">Avanzata</option>
+                <option value="base">Base</option>
+                <option value="testo">Solo testo</option>
+              </select>
+            </label>
+            <hr>
+            <p class="latenza" id="latenza"></p>
+            <p class="statistiche-ai" id="statistiche-ai" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section id="schermata-inizio">
+      <h2>Che avventura vuoi vivere?</h2>
+      <p class="sottotitolo">
+        Niente mondi preconfezionati: scrivi tu la scena di partenza e l'AI inventa ambiente,
+        atmosfera, primo luogo, oggetti e creature. Poi ti muovi e scrivi le azioni.
+      </p>
+
+      <label class="campo">
+        <span>Descrivi l'avventura che vuoi vivere <em>(obbligatorio: il mondo lo inventa l'AI)</em></span>
+        <textarea id="idea" rows="3" placeholder="Un bosco di vetro dove gli alberi ricordano i nomi; oppure un faro dove le navi scompaiono…"></textarea>
+      </label>
+      <div class="esempi" aria-label="Idee di esempio">
+        <span>Ispirati:</span>
+        <button type="button" data-idea="Un faro su uno scoglio dove le navi scompaiono nella nebbia">Il faro nella nebbia</button>
+        <button type="button" data-idea="Un bosco di vetro dove gli alberi ricordano i nomi di chi passa">Il bosco di vetro</button>
+        <button type="button" data-idea="Una città sommersa dove le campane suonano ancora sott'acqua">La città sommersa</button>
+      </div>
+
+      <label class="campo">
+        <span>Il tuo nome</span>
+        <input id="nome" type="text" value="Viandante" maxlength="30" autocomplete="off">
+      </label>
+
+      <label class="campo scelta-grafica-inizio">
+        <span>Grafica <em>(più dettaglio = più token e attese più lunghe; si cambia anche durante la partita)</em></span>
+        <select class="sel-grafica" id="sel-grafica-inizio">
+          <option value="avanzata">Avanzata: sfumature, profondità, primo piano (~0,25 $/ora)</option>
+          <option value="base">Base: disegni semplici (~0,13 $/ora)</option>
+          <option value="testo">Solo testo: niente grafica (~0,07 $/ora)</option>
+        </select>
+      </label>
+
+      <button id="btn-inizia" type="button" class="primario">Inizia l'avventura</button>
+      <p class="nota" id="nota-ai"></p>
+    </section>
+
+    <section id="schermata-gioco" hidden>
+      <div id="area-scena">
+        <div id="cornice-scena">
+          <canvas id="canvas-scena" width="960" height="540" aria-label="Scena generata dall'AI: clicca un oggetto o una creatura per esaminarlo"></canvas>
+        </div>
+
+        <div id="plancia">
+          <div id="hud">
+            <h2 id="luogo-nome">—</h2>
+            <div class="barra" title="Vita">
+              <span>Vita</span>
+              <div class="binario"><div class="riempimento vita" id="barra-vita"></div></div>
+              <b id="vita-num">6/6</b>
+            </div>
+            <div class="barra" title="Energia">
+              <span>Energia</span>
+              <div class="binario"><div class="riempimento energia" id="barra-energia"></div></div>
+              <b id="energia-num">5/5</b>
+            </div>
+          </div>
+
+          <nav id="dpad" aria-label="Bussola: direzioni">
+            <button type="button" data-dir="nord" aria-label="vai nord">N</button>
+            <button type="button" data-dir="ovest" aria-label="vai ovest">O</button>
+            <span class="centro" aria-hidden="true"></span>
+            <button type="button" data-dir="est" aria-label="vai est">E</button>
+            <button type="button" data-dir="sud" aria-label="vai sud">S</button>
+          </nav>
+
+          <section id="riquadro-mappa" aria-label="Mappa dei luoghi">
+            <div id="mappa" class="mappa"></div>
+            <p class="legenda"><b class="l-qui">●</b> sei qui · <b class="l-ogg">◆</b> oggetti · <b class="l-amico">☺</b> personaggi · <b class="l-ostile">☠</b> ostili · <b class="l-ignoto">?</b> da esplorare · <b>⇅</b> su/giù</p>
+          </section>
+        </div>
+      </div>
+
+      <aside id="diario">
+        <div id="scheda">
+          <div class="riga-scheda">
+            <span class="etichetta">Obiettivo</span>
+            <p id="obiettivo">—</p>
+          </div>
+          <div class="riga-scheda">
+            <span class="etichetta">Zaino</span>
+            <ul id="inventario" class="chip-lista" title="Clicca un oggetto per aggiungerlo al comando"><li class="vuoto">vuoto</li></ul>
+          </div>
+          <div class="riga-scheda">
+            <span class="etichetta">Uscite</span>
+            <p id="luogo-uscite"></p>
+          </div>
+        </div>
+
+        <main id="log" aria-live="polite"></main>
+
+        <form id="modulo-comando" autocomplete="off">
+          <div class="scorciatoie">
+            <button type="button" data-comando="guarda">guarda</button>
+            <button type="button" data-comando="inventario">inventario</button>
+            <button type="button" data-comando="aspetta">aspetta</button>
+            <button type="button" data-comando="aiuto">aiuto</button>
+          </div>
+          <div class="riga-comando">
+            <input id="comando" type="text" maxlength="300" aria-label="Cosa fai?" placeholder="Cosa fai? es. &quot;prendo l'amuleto&quot;, &quot;parlo con il guardiano&quot;">
+            <button type="submit" class="primario" id="btn-agisci">Agisci</button>
+          </div>
+          <p class="suggerimento"><kbd>Invio</kbd> agisci · <kbd>Esc</kbd> poi <kbd>WASD</kbd>/frecce per muoverti · clicca la scena · <kbd>G</kbd> vista</p>
+        </form>
+      </aside>
+    </section>
+  </div>
+
+  <script src="motore.js"></script>
+
+  <!-- grafica: dal basso verso l'alto (dipendenze prima) -->
+  <script src="grafica/penna.js"></script>
+  <script src="grafica/svg-ai.js"></script>
+  <script src="grafica/varianti.js"></script>
+  <script src="grafica/prospettiva.js"></script>
+  <script src="grafica/sagome.js"></script>
+  <script src="grafica/parti.js"></script>
+  <script src="grafica/scheletri.js"></script>
+  <script src="grafica/ricette.js"></script>
+  <script src="grafica/oggetti.js"></script>
+  <script src="grafica/ambienti.js"></script>
+  <script src="grafica/effetti.js"></script>
+  <script src="grafica/atmosfera.js"></script>
+  <script src="grafica/modello.js"></script>
+  <script src="grafica/disegno.js"></script>
+
+  <script src="suoni.js"></script>
+  <script src="ai.js"></script>
+  <script src="vista_testo.js"></script>
+  <script src="vista_grafica.js"></script>
+</body>
+</html>

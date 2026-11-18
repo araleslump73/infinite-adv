@@ -1,0 +1,7 @@
+{
+  "provider": "deepseek",
+  "modello": "deepseek-flash",
+  "chiave": "sk-la-tua-chiave",
+  "temperatura": 0.9,
+  "ragionamento": false
+}
