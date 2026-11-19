@@ -1,5 +1,6 @@
 config.json
 ai-stato.json
+.firebase/
 prisma
 node_modules/
 *.log

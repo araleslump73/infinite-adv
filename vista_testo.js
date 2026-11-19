@@ -604,12 +604,17 @@
     if (S.ai) {
       nota.className = "nota";
       nota.textContent =
-        "AI pronta (" + (AI.info.provider || "?") + " · " + (AI.info.modello || "?") + "): genera SVG per ambienti, oggetti e creature. Senza SVG valido, la grafica resta vuota.";
+        "AI pronta (" + (AI.info.provider || "?") + " · " + (AI.info.modello || "?") + "): genera SVG per ambienti, oggetti e creature. Senza SVG valido, la grafica resta vuota." +
+        (AI.info.modalita === "firebase"
+          ? " La chiave AI è condivisa e visibile agli invitati: condividi il codice solo con persone fidate."
+          : "");
     } else {
       nota.className = "nota avviso";
       nota.textContent =
         "AI non disponibile (" + (AI.info.motivo || "?") + "). Senza AI il mondo resta essenziale: " +
-        "la grafica AI richiede una chiave in config.json e «node server.js».";
+        (AI.info.modalita === "server"
+          ? "configura la chiave in config.json e avvia «node server.js»."
+          : "serve il codice invito e la chiave DeepSeek nel database Firebase.");
     }
     if (localStorage.getItem(CHIAVE_SALVATAGGIO)) {
       nota.textContent += " C'è una partita salvata: menu «Partita» › «Carica salvataggio».";

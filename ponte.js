@@ -1,12 +1,20 @@
 // =====================================================================
 // ponte.js - collegamento con l'AI (DeepSeek, OpenAI, Ollama, ...)
 //
-// Usato da server.js (che lo espone al browser) e da prova-ai.js.
-// Nessuna dipendenza esterna: solo fetch di Node 18+.
-// La chiave API resta qui, mai nella pagina.
+// Usato da server.js (la chiave resta sul server) e, sul sito statico,
+// direttamente dal browser con la chiave inserita dal giocatore.
+// Nessuna dipendenza esterna: solo fetch (Node 18+ o browser).
 // =====================================================================
-const fs = require("fs");
-const path = require("path");
+(function (root, fabbrica) {
+  const m = fabbrica();
+  if (typeof module === "object" && module.exports) module.exports = m;
+  else root.Ponte = m;
+})(typeof self !== "undefined" ? self : this, function () {
+"use strict";
+const NODE = typeof process !== "undefined" && process.versions && process.versions.node && typeof require === "function";
+const fs = NODE ? require("fs") : null;
+const path = NODE ? require("path") : null;
+const ENV = NODE ? process.env : {};
 
 const PRESET = {
   deepseek: {
@@ -57,14 +65,20 @@ function costoTokenConfigurato(config, provider, modello) {
   return COSTI_NOTI[provider + "/" + modello] || null;
 }
 
+// radice: cartella con config.json (Node). Nel browser si passa direttamente
+// l'oggetto di configurazione, es. { chiave: "sk-..." }.
 function configurazione(radice) {
-  const cartella = radice || __dirname;
   let cfg = {};
-  try {
-    cfg = JSON.parse(fs.readFileSync(path.join(cartella, "config.json"), "utf8"));
-  } catch (e) {
-    cfg = {};
+  if (radice && typeof radice === "object") {
+    cfg = radice;
+  } else if (NODE) {
+    try {
+      cfg = JSON.parse(fs.readFileSync(path.join(radice || __dirname, "config.json"), "utf8"));
+    } catch (e) {
+      cfg = {};
+    }
   }
+  const process = { env: ENV };
   const nome = String(cfg.provider || process.env.AI_PROVIDER || "deepseek").toLowerCase();
   const preset = PRESET[nome] || {
     baseUrl: "",
@@ -362,4 +376,137 @@ function messaggiBibbia(dati) {
   ];
 }
 
-module.exports = { PRESET, LIVELLI, LIVELLO_PREDEFINITO, livelloValido, configurazione, estraiJSON, chiedi, messaggiTurno, messaggiBibbia };
+// ------------------------------------------------ richieste complete
+// Stessa logica per server.js e per il browser. Ritornano
+// { risposta, chiamata, errore }: "chiamata" (ms, usage) c'è solo se l'AI
+// è stata davvero interpellata, "errore" se la risposta non era utilizzabile.
+function sanificaTesto(v, max) {
+  return String(v == null ? "" : v).replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max || 300);
+}
+
+async function generaBibbia(corpo, conf) {
+  const livello = livelloValido(corpo.livello);
+  const lv = LIVELLI[livello];
+  const r = await chiedi(messaggiBibbia({ idea: corpo.idea, nome: corpo.nome, livello }), {
+    cfg: conf,
+    timeoutMs: lv.timeoutBibbia,
+    maxTokens: lv.maxBibbia,
+    temperatura: 0.95,
+  });
+  const b = r.contenutoJSON;
+  if (!b) return { chiamata: r, errore: true, risposta: { fonte: "locale", motivo: "risposta AI senza JSON valido" } };
+  // il contenuto lo valida il motore nel browser (sanificaBibbia)
+  if (typeof b !== "object" || Array.isArray(b)) {
+    return { chiamata: r, errore: true, risposta: { fonte: "locale", motivo: "bibbia AI non valida" } };
+  }
+  return { chiamata: r, errore: false, risposta: { fonte: "ai", bibbia: b, ms: r.ms, modello: conf.modello } };
+}
+
+async function generaTurno(corpo, conf) {
+  const comando = sanificaTesto(corpo.comando, 300);
+  if (!comando) return { chiamata: null, errore: false, risposta: { fonte: "locale", motivo: "comando vuoto" } };
+  const livello = livelloValido(corpo.livello);
+  const lv = LIVELLI[livello];
+  const r = await chiedi(
+    messaggiTurno({
+      livello,
+      bibbia: corpo.bibbia,
+      stato: corpo.stato,
+      storia: Array.isArray(corpo.storia) ? corpo.storia.slice(-6) : [],
+      comando,
+    }),
+    { cfg: conf, timeoutMs: lv.timeoutTurno, maxTokens: lv.maxTurno }
+  );
+  const d = r.contenutoJSON;
+  if (!d || typeof d.narrazione !== "string") {
+    return { chiamata: r, errore: true, risposta: { fonte: "locale", motivo: "risposta AI senza narrazione valida" } };
+  }
+  return {
+    chiamata: r,
+    errore: false,
+    risposta: {
+      fonte: "ai",
+      narrazione: String(d.narrazione).slice(0, 1400),
+      effetti: Array.isArray(d.effetti) ? d.effetti.slice(0, 6) : [],
+      ms: r.ms,
+      modello: conf.modello,
+    },
+  };
+}
+
+// --------------------------------------------------------- statistiche
+function nuoveStatistiche() {
+  return {
+    chiamate: 0,
+    errori: 0,
+    msTotale: 0,
+    tokenTotali: 0,
+    tokenIngresso: 0,
+    tokenUscita: 0,
+    tokenSenzaRipartizione: 0,
+    chiamateSenzaUso: 0,
+  };
+}
+
+function registraUso(st, uso) {
+  if (!uso || typeof uso !== "object") {
+    st.chiamateSenzaUso++;
+    return;
+  }
+  const ingresso = uso.prompt_tokens;
+  const uscita = uso.completion_tokens;
+  const dettagliValidi = Number.isFinite(ingresso) && ingresso >= 0 && Number.isFinite(uscita) && uscita >= 0;
+  const totaleUso = uso.total_tokens;
+  const totaleValido = Number.isFinite(totaleUso) && totaleUso >= 0;
+  if (!dettagliValidi && !totaleValido) {
+    st.chiamateSenzaUso++;
+    return;
+  }
+  if (dettagliValidi) {
+    st.tokenIngresso += ingresso;
+    st.tokenUscita += uscita;
+  }
+  if (totaleValido) {
+    st.tokenTotali += totaleUso;
+    if (!dettagliValidi) st.tokenSenzaRipartizione += totaleUso;
+  } else if (dettagliValidi) {
+    st.tokenTotali += ingresso + uscita;
+  }
+}
+
+function riepilogoStatistiche(st, prezzi) {
+  const costoStimato =
+    prezzi && st.tokenSenzaRipartizione === 0 && st.chiamateSenzaUso === 0
+      ? (st.tokenIngresso * prezzi.input + st.tokenUscita * prezzi.output) / 1_000_000
+      : null;
+  return {
+    chiamate: st.chiamate,
+    errori: st.errori,
+    msMedio: st.chiamate ? Math.round(st.msTotale / st.chiamate) : 0,
+    tokenTotali: st.tokenTotali,
+    tokenIngresso: st.tokenIngresso,
+    tokenUscita: st.tokenUscita,
+    tokenSenzaRipartizione: st.tokenSenzaRipartizione,
+    chiamateSenzaUso: st.chiamateSenzaUso,
+    costoStimato,
+    valuta: prezzi ? prezzi.valuta : null,
+  };
+}
+
+return {
+  PRESET,
+  LIVELLI,
+  LIVELLO_PREDEFINITO,
+  livelloValido,
+  configurazione,
+  estraiJSON,
+  chiedi,
+  messaggiTurno,
+  messaggiBibbia,
+  generaBibbia,
+  generaTurno,
+  nuoveStatistiche,
+  registraUso,
+  riepilogoStatistiche,
+};
+});

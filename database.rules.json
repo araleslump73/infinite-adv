@@ -1,0 +1,447 @@
+{
+  "rules": {
+    "games": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      ".indexOn": [
+        "ts"
+      ],
+      "$gid": {
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && (newData.child('st').child('provaAdmin').val() !== true || data.child('st').child('provaAdmin').val() === true || (root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        ".validate": "newData.hasChildren(['id', 'cfg', 'seats', 'ts']) && (!newData.child('st').child('provaAdmin').exists() || newData.child('st').child('provaAdmin').isBoolean())"
+      }
+    },
+    "chat": {
+      "$gid": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && !newData.exists()",
+        "$mid": {
+          ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && (!data.exists() || (!newData.exists() && (data.child('t').val() < now - 604800000 || data.child('uid').val() === auth.uid || ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))))",
+          ".validate": "newData.child('uid').val() === auth.uid && newData.child('x').isString() && newData.child('x').val().length <= 240"
+        },
+        ".indexOn": [
+          "t"
+        ]
+      }
+    },
+    "voice": {
+      "$gid": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && !newData.exists()",
+        "$vid": {
+          ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && (!data.exists() || data.child('uid').val() === auth.uid || (!newData.exists() && data.child('t').val() < now - 604800000))",
+          ".validate": "newData.child('uid').val() === auth.uid && newData.child('b64').isString() && newData.child('b64').val().length < 260000"
+        },
+        ".indexOn": [
+          "t"
+        ]
+      }
+    },
+    "privateChats": {
+      "$tid": {
+        "meta": {
+          ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && (root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' || root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'invited')",
+          ".write": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && !data.exists() && newData.exists() && newData.child('creator').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()",
+          ".validate": "$tid.matches(/^[a-z2-9]{12,24}$/) && newData.hasChildren(['creator', 'title', 'createdAt'])",
+          "creator": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{12}$/)"
+          },
+          "title": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber() && newData.val() <= now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        "members": {
+          ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && (root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' || root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'invited')",
+          "$acct": {
+            ".write": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && ((!data.exists() && newData.exists() && (( $acct === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && root.child('privateChats').child($tid).child('meta').child('creator').val() === $acct && newData.child('s').val() === 'active' && newData.child('r').val() === 'owner') || (root.child('privateChats').child($tid).child('meta').child('creator').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' && root.child('amici').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child($acct).val() === true && newData.child('s').val() === 'invited' && newData.child('r').val() === 'member'))) || ($acct === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && data.child('s').val() === 'invited' && newData.exists() && newData.child('s').val() === 'active' && newData.child('r').val() === 'member') || (data.exists() && !newData.exists() && ($acct === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() || (root.child('privateChats').child($tid).child('meta').child('creator').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active'))))",
+            ".validate": "$acct.matches(/^[0-9a-f]{12}$/) && newData.hasChildren(['s', 'r', 'n']) && (newData.child('s').val() === 'active' || newData.child('s').val() === 'invited') && (newData.child('r').val() === 'owner' || newData.child('r').val() === 'member')",
+            "s": {
+              ".validate": "newData.isString()"
+            },
+            "r": {
+              ".validate": "newData.isString()"
+            },
+            "n": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "messages": {
+          ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active'",
+          "$mid": {
+            ".write": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' && ((!data.exists() && newData.exists() && newData.child('a').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && newData.child('uid').val() === auth.uid) || (!newData.exists() && data.child('a').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()))",
+            ".validate": "newData.hasChildren(['a', 'uid', 'n', 'x', 't']) && newData.child('a').val().matches(/^[0-9a-f]{12}$/) && newData.child('uid').val() === auth.uid && newData.child('t').isNumber() && newData.child('t').val() <= now && newData.child('x').isString() && newData.child('x').val().length >= 1 && newData.child('x').val().length <= 240",
+            "a": {
+              ".validate": "newData.isString()"
+            },
+            "uid": {
+              ".validate": "newData.isString()"
+            },
+            "n": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+            },
+            "x": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 240"
+            },
+            "t": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    },
+    "privateChatsByAccount": {
+      "$acct": {
+        ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        "$tid": {
+          ".write": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists() && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && ((!newData.exists() && ($acct === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() || (root.child('privateChats').child($tid).child('meta').child('creator').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' && root.child('privateChats').child($tid).child('members').child($acct).exists()))) || (newData.exists() && root.child('privateChats').child($tid).child('members').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).child('s').val() === 'active' && root.child('privateChats').child($tid).child('members').child($acct).exists()))",
+          ".validate": "newData.hasChildren(['title', 'state', 'createdAt', 'lastAt', 'lastText', 'lastBy']) && newData.child('title').val() === root.child('privateChats').child($tid).child('meta').child('title').val() && newData.child('state').val() === root.child('privateChats').child($tid).child('members').child($acct).child('s').val() && newData.child('createdAt').val() === root.child('privateChats').child($tid).child('meta').child('createdAt').val() && newData.child('lastAt').isNumber() && newData.child('lastAt').val() <= now && newData.child('lastText').isString() && newData.child('lastText').val().length <= 100 && newData.child('lastBy').isString() && (newData.child('lastBy').val() === '' || newData.child('lastBy').val().matches(/^[0-9a-f]{12}$/))",
+          "title": {
+            ".validate": "newData.isString()"
+          },
+          "state": {
+            ".validate": "newData.isString()"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastText": {
+            ".validate": "newData.isString()"
+          },
+          "lastBy": {
+            ".validate": "newData.isString()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "presence": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      "$pid": {
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && $pid.beginsWith(auth.uid)"
+      }
+    },
+    "events": {
+      "$gid": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && !newData.exists()",
+        "$uid": {
+          ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && auth.uid === $uid"
+        }
+      }
+    },
+    "locks": {
+      "$gid": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())"
+      }
+    },
+    "rtc": {
+      "$gid": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())"
+      }
+    },
+    "gate": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())"
+    },
+    "codes": {
+      ".read": false,
+      ".write": false
+    },
+    "members": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.isString() && newData.val().length <= 64 && root.child('codes').child(newData.val()).exists()"
+      }
+    },
+    "accounts": {
+      "$u": {
+        ".write": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && newData.exists() && (!data.exists() || (root.child('sessions').child(auth.uid).child('u').val() === $u && root.child('sessions').child(auth.uid).child('k').val() === data.child('hash').val()))) || ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')",
+        ".validate": "$u.length <= 100 && $u.matches(/^[a-z0-9_+,-]+@[a-z0-9,-]+$/) && newData.hasChildren(['salt', 'hash', 'name', 'id'])",
+        "salt": {
+          ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{32}$/)"
+        },
+        "hash": {
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)"
+        },
+        "name": {
+          ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').val() === $u && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child($u).child('hash').val()",
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 24"
+        },
+        "id": {
+          ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').val() === $u && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child($u).child('hash').val()",
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{12}$/) && (!data.exists() || newData.val() === data.val())"
+        },
+        "t": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      ".read": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')"
+    },
+    "sessions": {
+      ".indexOn": [
+        "u"
+      ],
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid && data.child('u').isString() && data.child('k').isString() && root.child('accounts').child(data.child('u').val()).child('hash').val() === data.child('k').val()",
+        ".write": "auth != null && (auth.uid === $uid || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')))",
+        ".validate": "newData.child('u').isString() && newData.child('u').val().length <= 100 && newData.child('u').val().matches(/^[a-z0-9_+,-]+@[a-z0-9,-]+$/) && newData.child('k').isString() && newData.parent().parent().child('accounts').child(newData.child('u').val()).child('hash').val() === newData.child('k').val()",
+        "u": {
+          ".validate": "newData.isString()"
+        },
+        "k": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      ".read": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')"
+    },
+    "eroi": {
+      "$acct": {
+        ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+        ".write": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val()) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        "$pid": {
+          ".validate": "$pid.length <= 24 && newData.hasChildren(['nome', 'classe', 'razza', 'base']) && (data.exists() || !data.parent().exists())"
+        }
+      }
+    },
+    "ruoli": {
+      ".read": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')",
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore') && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() !== $acct",
+        ".validate": "newData.isString() && newData.val() === 'amministratore'"
+      }
+    },
+    "pacchi": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      "$id": {
+        ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && ((!data.exists() && newData.child('da').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()) || (data.exists() && !newData.exists() && (data.child('a').val() === '' || data.child('a').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() || data.child('da').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() || data.child('t').val() < now - 2592000000 || ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))))",
+        ".validate": "$id.length <= 24 && newData.hasChildren(['da', 'daN', 'a', 'ogg', 't'])",
+        "da": {
+          ".validate": "newData.isString() && newData.val().length <= 24"
+        },
+        "daN": {
+          ".validate": "newData.isString() && newData.val().length <= 24"
+        },
+        "a": {
+          ".validate": "newData.isString() && newData.val().length <= 24"
+        },
+        "aN": {
+          ".validate": "newData.isString() && newData.val().length <= 24"
+        },
+        "msg": {
+          ".validate": "newData.isString() && newData.val().length <= 140"
+        },
+        "img": {
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "ogg": {
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "t": {
+          ".validate": "newData.isNumber()"
+        },
+        "x": {
+          ".validate": "newData.isNumber()"
+        },
+        "y": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "rubrica": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      "$acct": {
+        ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        ".validate": "newData.hasChildren(['n', 't'])",
+        "n": {
+          ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 24"
+        },
+        "t": {
+          ".validate": "newData.isNumber()"
+        },
+        "c": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+        },
+        "e": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "posta": {
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "(!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        "$mid": {
+          ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && !data.exists() && newData.exists() && $acct.matches(/^[0-9a-f]{12}$/)) || (auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct && !newData.exists())",
+          ".validate": "newData.hasChildren(['da', 'daN', 'k', 't']) && newData.child('da').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() && (newData.child('k').val() === 'msg' || newData.child('k').val() === 'call' || newData.child('k').val() === 'inv') && newData.child('t').isNumber() && newData.child('t').val() <= now",
+          "da": {
+            ".validate": "newData.isString() && newData.val().length <= 24"
+          },
+          "daN": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+          },
+          "k": {
+            ".validate": "newData.isString()"
+          },
+          "x": {
+            ".validate": "newData.isString() && newData.val().length <= 240"
+          },
+          "r": {
+            ".validate": "newData.isString() && newData.val().length <= 24"
+          },
+          "u": {
+            ".validate": "newData.isString() && newData.val().length <= 120"
+          },
+          "g": {
+            ".validate": "newData.isString() && newData.val().length <= 60"
+          },
+          "t": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "scoperti": {
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        "$ogg": {
+          ".validate": "$ogg.length <= 16 && newData.val() === true"
+        }
+      }
+    },
+    "avventureNascoste": {
+      ".read": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')",
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')",
+        "$mod": {
+          ".validate": "$mod.length <= 60 && newData.val() === true"
+        }
+      }
+    },
+    "vetrina": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      ".write": "((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore')",
+      "$gioco": {
+        ".validate": "$gioco.matches(/^[a-z]{3,20}$/)",
+        "nascosto": {
+          ".validate": "newData.val() === true"
+        },
+        "avventure": {
+          "$mod": {
+            ".validate": "$mod.length <= 60 && newData.val() === true"
+          }
+        },
+        "mazzi": {
+          "$mazzo": {
+            ".validate": "$mazzo.length <= 60 && newData.val() === true"
+          }
+        },
+        "$altro": {
+          ".validate": false
+        }
+      }
+    },
+    "classifica": {
+      ".read": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists())",
+      "$acct": {
+        ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        ".validate": "newData.hasChildren(['t'])",
+        "v": {
+          "$g": {
+            ".validate": "$g.matches(/^[a-z]{3,16}$/) && newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000 && newData.val() <= newData.parent().parent().child('p').child($g).val() && newData.val() <= (data.exists() ? data.val() : 0) + 40"
+          }
+        },
+        "p": {
+          "$g": {
+            ".validate": "$g.matches(/^[a-z]{3,16}$/) && newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000 && newData.val() <= (data.exists() ? data.val() : 0) + 40"
+          }
+        },
+        "t": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "contate": {
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        "$gid": {
+          ".validate": "$gid.length <= 24 && newData.val() === true"
+        }
+      }
+    },
+    "amici": {
+      "$acct": {
+        ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct",
+        ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+        "$k": {
+          ".validate": "$k.length <= 24 && newData.val() === true"
+        }
+      }
+    },
+    "triviali": {
+      "viste": {
+        "$acct": {
+          ".read": "auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val()",
+          ".write": "(auth != null && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val() === $acct) || (!newData.exists() && ((auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'))",
+          ".validate": "newData.isString() && newData.val().length <= 20000"
+        }
+      }
+    },
+    "avventuraAI": {
+      ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()",
+      ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'",
+      "deepseek": {
+        "apiKey": {
+          ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 200"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "$other": {
+        ".validate": false
+      }
+    }
+  }
+}

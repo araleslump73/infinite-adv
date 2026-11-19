@@ -138,7 +138,34 @@ il browser serve quella pagina al posto della tua. Rimedi:
 - oppure, una volta per sempre: F12 → **Application → Service Workers → Unregister**, poi Ctrl+Shift+R.
 
 Il badge in alto a destra dice chi sta raccontando: `AI · deepseek-flash` oppure `AI · locale`.
-La chiave resta nel server: `config.json` non viene mai servito al browser.
+In locale la chiave resta nel server: `config.json` non viene mai servito al browser.
+
+### Pubblicazione su Firebase con invito
+
+Il sito statico usa Firebase Authentication anonima e la stessa parola d'ordine/codice di
+`tavolo-amici`. Dopo l'accesso legge la chiave da `/avventuraAI/deepseek/apiKey` nel Realtime
+Database. Le regole consentono la lettura solo agli invitati e la scrittura solo a un account
+amministratore di Tavolo Amici.
+
+**La chiave non è un segreto per gli invitati:** il browser deve leggerla per chiamare DeepSeek,
+quindi chiunque conosca il codice può recuperarla dagli strumenti per sviluppatori. Usa una chiave
+dedicata con credito/limite ridotto e condividi il codice solo con persone fidate. Per una chiave
+invisibile ai giocatori serve un backend/Cloud Function.
+
+Per configurarla, da Firebase Console → Realtime Database inserisci:
+
+```json
+{
+  "avventuraAI": {
+    "deepseek": {
+      "apiKey": "INSERISCI_LA_TUA_CHIAVE"
+    }
+  }
+}
+```
+
+Il codice non contiene chiavi. `firebase.json` esclude `config.json` e il server locale dalla
+pubblicazione.
 
 ### Come nasce l'avventura (una sola chiamata)
 
@@ -205,8 +232,8 @@ Se un endpoint rifiuta `response_format` (JSON mode), il ponte riprova senza.
 | `index.html`, `stile.css` | pagina, menu iniziale, scena con HUD e bussola, diario |
 | `vista_testo.js` | interfaccia: comandi, attesa, animazione del testo, salvataggi, mappa SVG, livello di grafica |
 | `motore.js` | stato del mondo, operazioni ammesse, validatore, parser italiano, generatore locale |
-| `ai.js` | lato browser: chiede i turni al server, timeout, cache e statistiche AI |
-| `ponte.js` | lato server: configurazione provider, chiamata AI, estrazione del JSON, prompt |
+| `ai.js` | lato browser: server locale o Firebase, autenticazione invito, cache e statistiche |
+| `ponte.js` | chiamate AI, configurazione provider, estrazione del JSON, prompt (Node e browser) |
 | `server.js` | server statico + `/api/nuovo-gioco` + `/api/turno`, senza dipendenze |
 | `suoni.js` | effetti sintetizzati con Web Audio, attivati dal menu |
 | `prova-ai.js` | controlla chiave e collegamento: stampa un turno di prova con latenza e token |

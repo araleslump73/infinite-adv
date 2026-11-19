@@ -1,9 +1,8 @@
 // =====================================================================
-// ai.js - lato browser: parla con il server locale (/api/...)
+// ai.js - lato browser: server locale oppure Firebase + chiave autorizzata
 //
-// - sa se l'AI è configurata (GET /api/stato)
-// - rifinisce la bibbia all'inizio (POST /api/nuovo-gioco)
-// - chiede un turno (POST /api/turno) con timeout breve
+// - sul sito statico autentica l'invito e legge la chiave AI dal database
+// - con il server locale usa gli endpoint /api/...
 // - mette in cache le azioni ripetute con lo stesso stato
 //
 // Se il server non c'è (pagina aperta come file) tutto resta in locale.
@@ -46,6 +45,10 @@
   const CACHE_SOLO_VELOCI_MS = 5000;
 
   const info = { ai: false, provider: "", modello: "", motivo: "", limite: 0 };
+  let modalita = "";
+  let database = null;
+  let configurazioneAI = null;
+  const CHIAVE_STATISTICHE = "avventura.statisticheAI";
   const cache = new Map();
   let ultimaLatenza = 0;
   let fallimenti = 0;
@@ -82,6 +85,15 @@
   }
 
   async function statistiche() {
+    if (modalita === "firebase") {
+      try {
+        return Ponte.riepilogoStatistiche(leggiStatistiche(), Ponte.configurazione({ provider: "deepseek", modello: info.modello }).costoTokenPerMilione);
+      } catch (e) {
+        console.warn("[statistiche AI] non disponibili:", e.message);
+        return null;
+      }
+    }
+    if (modalita !== "server") return null;
     if (typeof location !== "undefined" && !/^https?:$/.test(location.protocol)) return null;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 4000);
@@ -106,21 +118,192 @@
       info.motivo = "pagina aperta come file: manca il server locale";
       return info;
     }
+    const hostLocale =
+      typeof location !== "undefined" &&
+      (location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname === "[::1]");
+    if (hostLocale) {
+      try {
+        const r = await fetch("ai-stato.json?t=" + Date.now(), { cache: "no-store" });
+        if (r.ok) {
+          const d = await r.json();
+          modalita = "server";
+          info.modalita = "server";
+          info.ai = Boolean(d.ai);
+          info.provider = d.provider || "";
+          info.modello = d.modello || "";
+          info.limite = d.limite || 0;
+          info.motivo = d.ai ? "" : d.motivo || "AI non configurata nel server locale";
+          return info;
+        }
+      } catch (e) {
+        // Il sito statico non espone ai-stato.json.
+      }
+    }
+
     try {
-      // file statici, rigenerato da server.js a ogni avvio: nessuna richiesta a endpoint assenti
-      const r = await fetch("ai-stato.json?t=" + Date.now(), { cache: "no-store" });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const d = await r.json();
-      info.ai = Boolean(d.ai);
-      info.provider = d.provider || "";
-      info.modello = d.modello || "";
-      info.limite = d.limite || 0;
-      info.motivo = d.ai ? "" : d.motivo || "AI non configurata sul server (manca la chiave)";
+      if (!root.firebase || !root.firebase.initializeApp) throw new Error("Firebase SDK non caricato");
+      const cfgRisposta = await fetch("/__/firebase/init.json", { cache: "no-store" });
+      if (!cfgRisposta.ok) throw new Error("Configurazione Firebase non trovata");
+      const firebaseCfg = await cfgRisposta.json();
+      if (!firebaseCfg.databaseURL && firebaseCfg.projectId) {
+        firebaseCfg.databaseURL = "https://" + firebaseCfg.projectId + "-default-rtdb.europe-west1.firebasedatabase.app";
+      }
+      if (!root.firebase.apps.length) root.firebase.initializeApp(firebaseCfg);
+      const auth = root.firebase.auth();
+      const credenziali = await auth.signInAnonymously();
+      database = root.firebase.database();
+      const uid = credenziali.user.uid;
+      const membro = database.ref("members/" + uid);
+      let codice = "";
+      try {
+        codice = root.localStorage.getItem("avventura.codiceInvito") || "";
+      } catch (e) {
+        codice = "";
+      }
+
+      async function verificaCodice(valore) {
+        const normalizzato = String(valore || "").trim().toLowerCase().replace(/[.$#\[\]\/]/g, "_").slice(0, 64);
+        if (!normalizzato) return false;
+        await membro.set(normalizzato);
+        await database.ref("gate").once("value");
+        codice = normalizzato;
+        try {
+          root.localStorage.setItem("avventura.codiceInvito", codice);
+        } catch (e) {
+          /* il codice è riutilizzabile anche senza memoria locale */
+        }
+        return true;
+      }
+
+      function chiediCodice() {
+        return new Promise((resolve) => {
+          const overlay = document.createElement("div");
+          overlay.className = "ai-invito";
+          const scheda = document.createElement("section");
+          scheda.className = "ai-invito-scheda";
+          const titolo = document.createElement("h2");
+          titolo.textContent = "Accesso amici";
+          const descrizione = document.createElement("p");
+          descrizione.textContent = "Inserisci il codice invito di Tavolo Amici per attivare l'AI. La chiave AI è condivisa e visibile a tutti gli invitati.";
+          const form = document.createElement("form");
+          const campo = document.createElement("input");
+          campo.type = "password";
+          campo.autocomplete = "current-password";
+          campo.maxLength = 64;
+          campo.placeholder = "Codice invito";
+          campo.setAttribute("aria-label", "Codice invito");
+          const errore = document.createElement("p");
+          errore.className = "ai-invito-errore";
+          errore.setAttribute("aria-live", "polite");
+          const entra = document.createElement("button");
+          entra.type = "submit";
+          entra.className = "primario";
+          entra.textContent = "Entra";
+          const locale = document.createElement("button");
+          locale.type = "button";
+          locale.className = "fantasma";
+          locale.textContent = "Continua senza AI";
+          let finito = false;
+          const chiudi = (valore) => {
+            if (finito) return;
+            finito = true;
+            overlay.remove();
+            resolve(valore);
+          };
+          form.addEventListener("submit", async (ev) => {
+            ev.preventDefault();
+            errore.textContent = "";
+            entra.disabled = true;
+            try {
+              if (!await verificaCodice(campo.value)) {
+                errore.textContent = "Inserisci il codice invito.";
+                entra.disabled = false;
+                return;
+              }
+              chiudi(true);
+            } catch (e) {
+              if (/permission/i.test(String(e.code || e.message || e))) {
+                errore.textContent = "Codice non valido o regole Firebase non ancora configurate.";
+              } else {
+                errore.textContent = "Firebase non raggiungibile: " + String(e.message || e).slice(0, 100);
+              }
+              entra.disabled = false;
+              campo.select();
+            }
+          });
+          locale.addEventListener("click", () => chiudi(false));
+          form.append(campo, errore, entra);
+          scheda.append(titolo, descrizione, form, locale);
+          overlay.append(scheda);
+          document.body.append(overlay);
+          campo.focus();
+        });
+      }
+
+      if (codice) {
+        try {
+          await verificaCodice(codice);
+        } catch (e) {
+          if (!/permission/i.test(String(e.code || e.message || e))) throw e;
+          codice = "";
+          try {
+            root.localStorage.removeItem("avventura.codiceInvito");
+          } catch (x) {
+            /* niente */
+          }
+        }
+      }
+      if (!codice) codice = (await chiediCodice()) ? "verificato" : "";
+      if (!codice) throw new Error("Serve un codice invito valido per leggere la chiave AI.");
+
+      const chiaveSnap = await database.ref("avventuraAI/deepseek/apiKey").once("value");
+      const chiave = chiaveSnap.val();
+      if (typeof chiave !== "string" || !chiave.trim()) {
+        throw new Error("Chiave AI non configurata in Firebase: avventuraAI/deepseek/apiKey.");
+      }
+      const cfgAI = Ponte.configurazione({
+        provider: "deepseek",
+        modello: "deepseek-flash",
+        chiave: chiave.trim(),
+        ragionamento: false,
+      });
+      if (!cfgAI.attivo) throw new Error("Configurazione AI incompleta in Firebase.");
+      configurazioneAI = cfgAI;
+      modalita = "firebase";
+      info.modalita = "firebase";
+      info.ai = true;
+      info.provider = cfgAI.provider;
+      info.modello = cfgAI.modello;
+      info.limite = 0;
+      info.motivo = "";
     } catch (e) {
       info.ai = false;
-      info.motivo = "server non raggiungibile: si gioca in locale";
+      info.motivo = e && e.message ? e.message : "Firebase o AI non disponibili";
     }
     return info;
+  }
+
+  function leggiStatistiche() {
+    try {
+      const s = JSON.parse(root.localStorage.getItem(CHIAVE_STATISTICHE) || "null");
+      return s && typeof s === "object" ? s : Ponte.nuoveStatistiche();
+    } catch (e) {
+      return Ponte.nuoveStatistiche();
+    }
+  }
+
+  function registraChiamata(r) {
+    if (!r || !r.chiamata) return;
+    const s = leggiStatistiche();
+    s.chiamate++;
+    s.msTotale += r.chiamata.ms || 0;
+    if (r.errore) s.errori++;
+    Ponte.registraUso(s, r.chiamata.usage);
+    try {
+      root.localStorage.setItem(CHIAVE_STATISTICHE, JSON.stringify(s));
+    } catch (e) {
+      console.warn("[statistiche AI] impossibile salvare:", e.message);
+    }
   }
 
   function chiaveCache(dati) {
@@ -159,6 +342,16 @@
   async function bibbia(dati) {
     if (!info.ai) return null;
     dati = Object.assign({ livello }, dati);
+    if (modalita === "firebase") {
+      try {
+        const r = await Ponte.generaBibbia(dati, configurazioneAI);
+        registraChiamata(r);
+        return r.risposta && r.risposta.fonte === "ai" ? r.risposta : null;
+      } catch (e) {
+        console.warn("[nuovo-gioco] AI non disponibile:", e.message);
+        return null;
+      }
+    }
     try {
       const r = await post("/api/nuovo-gioco", dati, LIVELLI[dati.livello].bibbia);
       const ok = Boolean(r && r.fonte === "ai");
@@ -177,6 +370,24 @@
     const salvata = daCache(chiave);
     if (salvata) return salvata;
     const iniziato = performance.now();
+    if (modalita === "firebase") {
+      try {
+        const esito = await Ponte.generaTurno(dati, configurazioneAI);
+        ultimaLatenza = Math.round(performance.now() - iniziato);
+        registraChiamata(esito);
+        if (!esito.risposta || esito.risposta.fonte !== "ai") {
+          registraEsito(false);
+          return null;
+        }
+        registraEsito(true);
+        if (ultimaLatenza < CACHE_SOLO_VELOCI_MS) inCache(chiave, esito.risposta);
+        return esito.risposta;
+      } catch (e) {
+        console.warn("[turno] AI non disponibile:", e.message);
+        registraEsito(false);
+        return null;
+      }
+    }
     try {
       const r = await post("/api/turno", dati, LIVELLI[dati.livello].turno);
       ultimaLatenza = Math.round(performance.now() - iniziato);

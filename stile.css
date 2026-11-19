@@ -41,6 +41,38 @@ body {
 
 :focus-visible { outline: 2px solid var(--oro); outline-offset: 2px; }
 
+.ai-invito {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3, 5, 8, 0.88);
+}
+.ai-invito-scheda {
+  width: min(100%, 430px);
+  padding: 24px;
+  border: 1px solid var(--bordo);
+  border-radius: var(--raggio);
+  background: var(--fondo2);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+.ai-invito-scheda h2 { margin: 0 0 8px; color: var(--oro); }
+.ai-invito-scheda p { color: var(--testo-tenue); font-size: 0.9rem; }
+.ai-invito-scheda form { display: grid; gap: 10px; }
+.ai-invito-scheda input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--bordo);
+  border-radius: var(--raggio);
+  background: var(--fondo);
+  color: var(--testo);
+  font: inherit;
+}
+.ai-invito-scheda .ai-invito-errore { min-height: 1.4em; margin: 0; color: var(--errore); }
+.ai-invito-scheda .fantasma { width: 100%; margin-top: 10px; }
+
 /* ------------------------------------------------------------ header */
 header {
   display: flex;

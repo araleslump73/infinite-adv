@@ -183,26 +183,14 @@ async function nuovoGioco(corpo) {
     return { fonte: "locale", motivo: "limite di chiamate AI raggiunto per questa sessione" };
   }
   try {
-    const livello = ponte.livelloValido(corpo.livello);
-    const lv = ponte.LIVELLI[livello];
-    const r = await ponte.chiedi(
-      ponte.messaggiBibbia({ idea: corpo.idea, nome: corpo.nome, livello }),
-      { cfg: conf, timeoutMs: lv.timeoutBibbia, maxTokens: lv.maxBibbia, temperatura: 0.95 }
-    );
-    statistiche.chiamate++;
-    statistiche.msTotale += r.ms;
-    registraUso(r.usage);
-    if (!r.contenutoJSON) {
-      statistiche.errori++;
-      return { fonte: "locale", motivo: "risposta AI senza JSON valido" };
+    const r = await ponte.generaBibbia(corpo, conf);
+    if (r.chiamata) {
+      statistiche.chiamate++;
+      statistiche.msTotale += r.chiamata.ms;
+      registraUso(r.chiamata.usage);
     }
-    // il contenuto lo valida il motore nel browser (sanificaBibbia):
-    // qui si controlla solo che sia un oggetto
-    if (typeof r.contenutoJSON !== "object" || Array.isArray(r.contenutoJSON)) {
-      statistiche.errori++;
-      return { fonte: "locale", motivo: "bibbia AI non valida" };
-    }
-    return { fonte: "ai", bibbia: r.contenutoJSON, ms: r.ms, modello: conf.modello };
+    if (r.errore) statistiche.errori++;
+    return r.risposta;
   } catch (e) {
     statistiche.errori++;
     console.warn("[nuovo-gioco] AI non disponibile:", e.message);
@@ -219,34 +207,15 @@ async function turno(corpo) {
   const comando = sanificaTesto(corpo.comando, 300);
   if (!comando) return { fonte: "locale", motivo: "comando vuoto" };
 
-  const livello = ponte.livelloValido(corpo.livello);
-  const lv = ponte.LIVELLI[livello];
   try {
-    const r = await ponte.chiedi(
-      ponte.messaggiTurno({
-        livello,
-        bibbia: corpo.bibbia,
-        stato: corpo.stato,
-        storia: Array.isArray(corpo.storia) ? corpo.storia.slice(-6) : [],
-        comando,
-      }),
-      { cfg: conf, timeoutMs: lv.timeoutTurno, maxTokens: lv.maxTurno }
-    );
-    statistiche.chiamate++;
-    statistiche.msTotale += r.ms;
-    registraUso(r.usage);
-    const d = r.contenutoJSON;
-    if (!d || typeof d.narrazione !== "string") {
-      statistiche.errori++;
-      return { fonte: "locale", motivo: "risposta AI senza narrazione valida" };
+    const r = await ponte.generaTurno(Object.assign({}, corpo, { comando }), conf);
+    if (r.chiamata) {
+      statistiche.chiamate++;
+      statistiche.msTotale += r.chiamata.ms;
+      registraUso(r.chiamata.usage);
     }
-    return {
-      fonte: "ai",
-      narrazione: String(d.narrazione).slice(0, 1400),
-      effetti: Array.isArray(d.effetti) ? d.effetti.slice(0, 6) : [],
-      ms: r.ms,
-      modello: conf.modello,
-    };
+    if (r.errore) statistiche.errori++;
+    return r.risposta;
   } catch (e) {
     statistiche.errori++;
     console.warn("[turno] AI non disponibile:", e.message);
