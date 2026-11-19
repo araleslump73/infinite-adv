@@ -428,11 +428,11 @@
         }
       }
     },
-    "avventuraAI": {
+    "avventuraai": {
       ".read": "auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()",
       ".write": "(auth != null && root.child('members').child(auth.uid).isString() && root.child('codes').child(root.child('members').child(auth.uid).val()).exists()) && root.child('sessions').child(auth.uid).child('u').isString() && root.child('sessions').child(auth.uid).child('k').val() === root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('hash').val() && root.child('ruoli').child(root.child('accounts').child(root.child('sessions').child(auth.uid).child('u').val()).child('id').val()).val() === 'amministratore'",
       "deepseek": {
-        "apiKey": {
+        "apikey": {
           ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 200"
         },
         "$other": {

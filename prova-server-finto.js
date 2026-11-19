@@ -20,7 +20,15 @@ const RISPOSTE = {
   lento: {
     fonte: "ai",
     narrazione: "NARRAZIONE_IN_RITARDO: arriva dopo il timeout, non deve cambiare lo stato.",
-    effetti: [{ op: "crea_oggetto", oggetto: { nome: "oggetto fantasma", descrizione: "Mai esistito." } }],
+    effetti: [
+      {
+        op: "cerca",
+        difficolta: "facile",
+        oggetto: { nome: "oggetto fantasma", descrizione: "Mai esistito." },
+        seRiesce: "Trovi qualcosa che non dovrebbe esistere.",
+        seFallisce: "Non trovi nulla.",
+      },
+    ],
     ms: 7000,
   },
   rotto: {
@@ -42,6 +50,20 @@ http
       const corpo = JSON.stringify({ ai: true, provider: "finto", modello: "finto-" + MODO, motivo: "", limite: 999, versione: 1 });
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       return res.end(corpo);
+    }
+    if (url === "/api/statistiche") {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify({ chiamate: 0, tokenTotali: 0, costoStimato: 0, valuta: "USD" }));
+    }
+    if (url === "/api/svg-oggetto") {
+      req.resume();
+      return req.on("end", () => {
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({
+          fonte: "ai",
+          svg: "<svg viewBox='0 0 100 100'><circle cx='50' cy='50' r='30' fill='#c8a060'/></svg>",
+        }));
+      });
     }
     if (url === "/api/turno" || url === "/api/nuovo-gioco") {
       req.resume();

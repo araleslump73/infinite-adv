@@ -13,7 +13,8 @@
   const FORMA = ["fill", "stroke", "stroke-width", "opacity", "fill-opacity", "stroke-opacity"];
   const ATTR = {
     svg: new Set(["viewBox", "width", "height", "preserveAspectRatio"]),
-    g: new Set(["opacity"]),
+    // lo stile dichiarato sul gruppo vale per tutte le forme interne: meno testo nella risposta AI
+    g: new Set(["stroke-linecap", "stroke-linejoin", ...FORMA]),
     defs: new Set([]),
     linearGradient: new Set(["id", "x1", "y1", "x2", "y2", "gradientUnits"]),
     radialGradient: new Set(["id", "cx", "cy", "r", "fx", "fy", "gradientUnits"]),
@@ -152,7 +153,9 @@
       if (/<!DOCTYPE|<!ENTITY/i.test(grezzo) || typeof DOMParser !== "function" || typeof XMLSerializer !== "function") {
         throw new Error("SVG non supportato");
       }
-      const documento = new DOMParser().parseFromString(grezzo, "image/svg+xml");
+      // l'AI può omettere xmlns per risparmiare token: si aggiunge solo se manca sulla radice
+      const testo = /^\s*<svg(?![^>]*\sxmlns\s*=)[\s/>]/.test(grezzo) ? grezzo.replace(/^\s*<svg/, `<svg xmlns="${NS}"`) : grezzo;
+      const documento = new DOMParser().parseFromString(testo, "image/svg+xml");
       const sorgente = documento.documentElement;
       if (
         documento.doctype ||

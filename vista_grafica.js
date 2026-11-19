@@ -351,6 +351,11 @@
     G.ultimoTurno = d;
   }
 
+  function suAssetSvg() {
+    if (!stato()) return;
+    ricostruisci(false);
+  }
+
   function suPartita() {
     G.caricamento = null;
     // il canvas può non essere ancora dimensionato (partita caricata da un salvataggio)
@@ -455,6 +460,7 @@
 
   function collega() {
     document.addEventListener("turno", suTurno);
+    document.addEventListener("asset-svg", suAssetSvg);
     document.addEventListener("partita", suPartita);
     canvas.addEventListener("click", comando);
     canvas.addEventListener("mousemove", punta);

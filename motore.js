@@ -33,6 +33,22 @@
   const scegli = (rnd, arr) => arr[tra(rnd, arr.length)];
   const forse = (rnd, p) => rnd() < p;
 
+  // L'AI sceglie la difficolta' guardando il contesto; il dado lo tira il
+  // motore. Cosi' chi scrive il comando non puo' convincere il dado.
+  const DIFFICOLTA_CASO = { facile: 0.7, media: 0.45, difficile: 0.2, "quasi-impossibile": 0.05, impossibile: 0 };
+  const MAX_TROVATI_LUOGO = 2;
+  const MIN_TURNI_VITTORIA = 10;
+
+  function probabilitaDifficolta(difficolta) {
+    const p = DIFFICOLTA_CASO[String(difficolta || "").toLowerCase()];
+    return typeof p === "number" ? p : DIFFICOLTA_CASO.media;
+  }
+
+  function tiraCaso(difficolta, seme) {
+    const p = probabilitaDifficolta(difficolta);
+    return { p, riuscito: p > 0 && rng(seme)() < p };
+  }
+
   // ------------------------------------------------------------- bibbia
   // La bibbia nasce SEMPRE dall'AI (vedi ponte.js): qui c'è solo la bozza
   // minima di emergenza, senza generi predefiniti e senza mondi preconfezionati.
@@ -218,6 +234,7 @@
         descrizione: testoPulito(p.descrizione, 200) || "Ti guarda senza dire nulla.",
         ostile: Boolean(p.ostile),
         vita: 3,
+        vitaMax: 3,
         tipo: "persona",
         aspetto: completaAspetto(testoPulito(p.nome, 60), "persona", p.aspetto, Boolean(p.ostile)),
         svg: svgAI(p.svg),
@@ -239,6 +256,7 @@
       descrizione: p.descrizione,
       ostile: Boolean(p.ostile),
       vita: p.vita || 3,
+      vitaMax: p.vitaMax || 3,
       tipo: "persona",
       aspetto: p.aspetto || null,
       svg: p.svg || null,
@@ -330,6 +348,7 @@
       luogo: "l0",
       luoghi,
       flag: {},
+      flagTurni: {},
       cronaca: [],
       finito: null,
     };
@@ -372,6 +391,10 @@
     return idx >= 0 ? idx : -1;
   }
 
+  function vitaPng(p) {
+    return p && p.vita != null ? Math.max(0, Number(p.vita) || 0) : 3;
+  }
+
   // --------------------------------------------------- stato per l'AI
   function statoCompatto(stato) {
     const L = stato.luoghi[stato.luogo];
@@ -389,7 +412,8 @@
         ritocchi: L.ritocchi && L.ritocchi.length ? L.ritocchi.map((r) => r.nome) : undefined,
         uscite: Object.keys(L.uscite).map((d) => d + "→" + stato.luoghi[L.uscite[d]].nome),
         oggetti: L.oggetti.map((o) => o.nome),
-        png: L.png.map((p) => p.nome + (p.ostile ? " (ostile)" : "")),
+        png: L.png.map((p) => p.nome + (p.ostile ? ` (ostile, vita ${vitaPng(p)}/${p.vitaMax || 3})` : "")),
+        trovati: L.trovati || 0,
       },
       giocatore: {
         nome: stato.giocatore.nome,
@@ -426,6 +450,17 @@
     parla(a) {
       return typeof a.png === "string" && a.png ? null : "png mancante";
     },
+    rimuovi(a) {
+      const haPng = typeof a.png === "string" && a.png;
+      const haOggetto = typeof a.oggetto === "string" && a.oggetto;
+      return haPng || haOggetto ? null : "rimuovi senza png o oggetto";
+    },
+    ferisci(a) {
+      const n = Number(a.n);
+      return typeof a.png === "string" && a.png && Number.isFinite(n) && n >= 1 && n <= 3
+        ? null
+        : "ferisci senza png o con n fuori scala (1-3)";
+    },
     danno(a) {
       return Number.isFinite(Number(a.n)) && Number(a.n) > 0 && Number(a.n) <= 4 ? null : "danno fuori scala (1-4)";
     },
@@ -435,8 +470,14 @@
     energia(a) {
       return Number.isFinite(Number(a.n)) && Math.abs(Number(a.n)) <= 3 ? null : "energia fuori scala (-3..3)";
     },
-    crea_oggetto(a) {
-      return a.oggetto && a.oggetto.nome ? null : "oggetto senza nome";
+    crea_oggetto() {
+      return "gli oggetti non compaiono per magia: usa cerca (con difficoltà)";
+    },
+    cerca(a) {
+      if (a.raccogli !== undefined && typeof a.raccogli !== "boolean") return "raccogli deve essere booleano";
+      return a.oggetto && typeof a.oggetto.nome === "string" && pulisciNome(a.oggetto.nome)
+        ? null
+        : "oggetto da cercare senza nome";
     },
     crea_luogo(a) {
       return a.nome && a.direzione && VETTORI[a.direzione] ? null : "luogo senza nome o direzione";
@@ -604,11 +645,14 @@
   function applicaEffetti(stato, effetti) {
     const cambi = [];
     const rifiutati = [];
+    const oggettiTrovati = [];
+    let aggiunta = ""; // finale scelto dal dado, quando l'azione era incerta
+    let ricerche = 0;
     const lista = Array.isArray(effetti) ? effetti.slice(0, MAX_EFFETTI) : [];
     if (!lista.length) {
       // un turno senza effetti è comunque un turno che passa
       stato.turno += 1;
-      return { cambi, rifiutati: [] };
+      return { cambi, rifiutati: [], aggiunta, oggettiTrovati };
     }
 
     for (const eff of lista) {
@@ -659,9 +703,56 @@
           rifiutati.push({ op, motivo: `"${nome}" non è qui` });
           continue;
         }
+        if (a.rimuove === true && L.png[idx].ostile && vitaPng(L.png[idx]) > 0) {
+          rifiutati.push({ op, motivo: `"${nome}" è ancora in piedi: usa ferisci` });
+          continue;
+        }
         L.png[idx].haParlato = true;
         if (a.rimuove === true) L.png.splice(idx, 1);
         cambi.push(`parlato con: ${nome}`);
+      } else if (op === "ferisci") {
+        const nome = pulisciNome(a.png);
+        const idx = trovaPng(stato, nome);
+        if (idx < 0) {
+          rifiutati.push({ op, motivo: `"${nome}" non è qui` });
+          continue;
+        }
+        const creatura = L.png[idx];
+        const n = Math.min(3, Math.max(1, Math.round(Number(a.n))));
+        creatura.vita = Math.max(0, vitaPng(creatura) - n);
+        if (creatura.vita <= 0) {
+          L.png.splice(idx, 1);
+          cambi.push(`abbattuto: ${nome}`);
+        } else {
+          cambi.push(`ferito: ${nome} (vita ${creatura.vita}/${creatura.vitaMax || 3})`);
+        }
+      } else if (op === "rimuovi") {
+        // creatura o oggetto fuori scena: se non è più nello stato, la grafica
+        // non lo disegna più (la scena è sempre ricostruita dallo stato)
+        const nomePng = typeof a.png === "string" ? pulisciNome(a.png) : "";
+        const nomeOggetto = typeof a.oggetto === "string" ? pulisciNome(a.oggetto) : "";
+        if (nomePng) {
+          const idx = trovaPng(stato, nomePng);
+          if (idx < 0) {
+            rifiutati.push({ op, motivo: `"${nomePng}" non è qui` });
+            continue;
+          }
+          // un nemico vivo non sparisce: deve essere abbattuto con ferisci
+          if (L.png[idx].ostile && vitaPng(L.png[idx]) > 0) {
+            rifiutati.push({ op, motivo: `"${nomePng}" è ancora in piedi: usa ferisci` });
+            continue;
+          }
+          L.png.splice(idx, 1);
+          cambi.push(`sparito: ${nomePng}`);
+        } else {
+          const idx = trovaOggetto(stato, nomeOggetto);
+          if (idx < 0) {
+            rifiutati.push({ op, motivo: `"${nomeOggetto}" non è qui` });
+            continue;
+          }
+          L.oggetti.splice(idx, 1);
+          cambi.push(`sparito: ${nomeOggetto}`);
+        }
       } else if (op === "danno") {
         const n = Math.min(4, Math.max(1, Math.round(Number(a.n))));
         stato.giocatore.vita.attuale -= n;
@@ -688,21 +779,64 @@
         const e = stato.giocatore.energia;
         e.attuale = Math.max(0, Math.min(e.massima, e.attuale + n));
         cambi.push(`energia ${n >= 0 ? "+" : ""}${n}`);
-      } else if (op === "crea_oggetto") {
+      } else if (op === "cerca") {
+        if (ricerche >= 1) {
+          rifiutati.push({ op, motivo: "una sola ricerca per turno" });
+          continue;
+        }
+        ricerche++;
+        const oggetto = a.oggetto;
+        const nome = pulisciNome(oggetto.nome);
         if (L.oggetti.length >= 6) {
           rifiutati.push({ op, motivo: "troppi oggetti in scena" });
           continue;
         }
-        L.oggetti.push({
-          nome: pulisciNome(a.oggetto.nome),
-          descrizione: pulisciNome(a.oggetto.descrizione || "Non sai bene cosa sia."),
-          tipo: "oggetto",
-          aspetto: sanificaRicettaOggetto(a.oggetto.aspetto),
-          svg: svgAI(a.oggetto.svg),
-          moto: motoElemento(a.oggetto.moto),
-          piano: pianoElemento(a.oggetto.piano),
-        });
-        cambi.push(`appare: ${pulisciNome(a.oggetto.nome)}`);
+        if (L.oggetti.some((o) => o.nome === nome)) {
+          rifiutati.push({ op, motivo: `"${nome}" è già qui` });
+          continue;
+        }
+        const trovati = Number(L.trovati) || 0;
+        if (trovati >= MAX_TROVATI_LUOGO) {
+          rifiutati.push({ op, motivo: "qui non c'è più nulla da trovare" });
+          continue;
+        }
+        const diff = Object.prototype.hasOwnProperty.call(DIFFICOLTA_CASO, String(a.difficolta || "").toLowerCase())
+          ? String(a.difficolta).toLowerCase()
+          : "media";
+        // ogni tentativo sullo stesso nome dimezza le probabilità: ripetere
+        // lo stesso comando non è una strategia
+        const tentativi = Math.max(0, Number((L.cercati || {})[nome.toLowerCase()]) || 0);
+        const p = probabilitaDifficolta(diff) * Math.pow(0.5, tentativi);
+        L.cercati = L.cercati || {};
+        L.cercati[nome.toLowerCase()] = tentativi + 1;
+        const seme = [stato.turno, stato.luogo, nome.toLowerCase(), tentativi].join("|");
+        const riuscito = p > 0 && rng(seme)() < p;
+        if (riuscito) {
+          const trovato = {
+            nome,
+            descrizione: testoPulito(oggetto.descrizione, 200) || "Non sai bene cosa sia.",
+            tipo: "oggetto",
+            aspetto: sanificaRicettaOggetto(oggetto.aspetto),
+            svg: svgAI(oggetto.svg),
+            moto: motoElemento(oggetto.moto),
+            piano: pianoElemento(oggetto.piano),
+          };
+          if (a.raccogli === true) stato.giocatore.inventario.push(trovato);
+          else {
+            L.oggetti.push(trovato);
+            oggettiTrovati.push({ idLuogo: stato.luogo, oggetto: trovato });
+          }
+          L.trovati = trovati + 1;
+          cambi.push(`trovato: ${nome} (${diff})`);
+          if (a.raccogli === true) cambi.push(`preso: ${nome}`);
+        } else {
+          cambi.push(`niente: ${nome} (${diff})`);
+        }
+        aggiunta = testoPulito(
+          (riuscito ? a.seRiesce : a.seFallisce) ||
+            (riuscito ? (a.raccogli === true ? "Lo trovi e lo raccogli." : "Lo trovi.") : "Non trovi nulla."),
+          400
+        );
       } else if (op === "crea_luogo") {
         if (L.uscite[a.direzione] || Object.keys(stato.luoghi).length >= 24) {
           rifiutati.push({ op, motivo: "uscita occupata o mondo pieno" });
@@ -750,6 +884,7 @@
           descrizione: pulisciNome(a.png.descrizione || "Ti guarda senza dire nulla."),
           ostile,
           vita: ostile ? 3 : 1,
+          vitaMax: ostile ? 3 : 1,
           tipo: "persona",
           aspetto,
           svg: svgAI(a.png.svg),
@@ -789,16 +924,50 @@
         el.svg = svg;
         cambi.push("cambia aspetto: " + nome);
       } else if (op === "imposta_flag") {
-        stato.flag[pulisciNome(a.chiave)] = a.valore === undefined ? true : a.valore;
-        cambi.push(`flag: ${pulisciNome(a.chiave)}`);
+        const chiave = pulisciNome(a.chiave);
+        stato.flag[chiave] = a.valore === undefined ? true : a.valore;
+        if (stato.flag[chiave]) {
+          stato.flagTurni = stato.flagTurni || {};
+          if (stato.flagTurni[chiave] === undefined) stato.flagTurni[chiave] = stato.turno;
+        }
+        cambi.push(`flag: ${chiave}`);
       } else if (op === "fine") {
-        stato.finito = { esito: pulisciNome(a.esito) || "fine", testo: pulisciNome(a.testo || "") };
+        const esitoFine = pulisciNome(a.esito) || "fine";
+        if (esitoFine === "vittoria" || esitoFine === "epilogo") {
+          // la vittoria non si chiede: serve un minimo di partita e un
+          // obiettivo dichiarato raggiunto in un turno precedente
+          const quando = stato.flagTurni && stato.flagTurni.obiettivoRaggiunto;
+          const matura =
+            stato.turno >= MIN_TURNI_VITTORIA &&
+            stato.flag.obiettivoRaggiunto === true &&
+            quando !== undefined &&
+            quando < stato.turno;
+          if (!matura) {
+            rifiutati.push({
+              op,
+              motivo: `vittoria non ancora matura (turni ${stato.turno}/${MIN_TURNI_VITTORIA}, obiettivo ${
+                stato.flag.obiettivoRaggiunto ? "sì" : "no"
+              })`,
+            });
+            continue;
+          }
+        }
+        stato.finito = { esito: esitoFine, testo: pulisciNome(a.testo || "") };
         cambi.push("fine della partita");
       }
     }
 
     stato.turno += 1;
-    return { cambi, rifiutati };
+    return { cambi, rifiutati, aggiunta, oggettiTrovati };
+  }
+
+  function aggiornaSvgOggetto(stato, idLuogo, oggetto, svg) {
+    const luogo = stato && stato.luoghi && stato.luoghi[idLuogo];
+    if (!luogo || !luogo.oggetti.includes(oggetto) || typeof svg !== "string" || svg.length > 32000) return false;
+    const pulito = root.SvgAI ? root.SvgAI.valida(svg, "elemento") : svgAI(svg);
+    if (!pulito) return false;
+    oggetto.svg = pulito;
+    return true;
   }
 
   function validaRispostaAI(dati) {
@@ -847,6 +1016,11 @@
     const t = comando.trim();
     for (const [nome, re] of INTENTI) if (re.test(t)) return nome;
     return null;
+  }
+
+  function comandoInformativo(comando) {
+    const testo = String(comando || "").trim().replace(/\s+/g, " ");
+    return /^(?:i|inv|inventario|zaino|cosa ho|oggetti|borsa|(?:mostra|elenca)\s+(?:lo\s+)?(?:zaino|inventario)|aiuto|help|comandi|\?|cosa posso fare)[.!?]*$/i.test(testo);
   }
 
   // cerca il nome più simile citato nel comando
@@ -1056,13 +1230,13 @@
       const tiro = 1 + tra(rnd, 6) + (stato.giocatore.inventario.some((o) => /spada|ascia|pugnale|rivoltella|pistola|taglierino|bastone/i.test(o.nome)) ? 2 : 0);
       const effetti = [{ op: "energia", n: -1 }];
       if (tiro >= 4) {
-        effetti.push({ op: "parla", png: nome, rimuove: p.vita <= 2 });
-        if (p.vita > 2) {
-          p.vita -= 2;
-          effetti.push({ op: "danno", n: 1 });
-        }
+        const colpoMortale = vitaPng(p) <= 2;
+        effetti.push({ op: "ferisci", png: nome, n: 2 });
+        if (!colpoMortale) effetti.push({ op: "danno", n: 1 });
         return {
-          narrazione: `Colpisci ${nome} (tiro ${tiro}). ${p.vita > 2 ? "Barcolla ma resta in piedi." : "Cede e sparisce tra le ombre."}`,
+          narrazione: `Colpisci ${nome} (tiro ${tiro}). ${
+            colpoMortale ? "Cede e sparisce tra le ombre." : "Barcolla ma resta in piedi, e ti ferisce."
+          }`,
           effetti,
           fonte: "locale",
         };
@@ -1111,6 +1285,11 @@
     AMBIENTI,
     METEO,
     rng,
+    DIFFICOLTA_CASO,
+    MAX_TROVATI_LUOGO,
+    MIN_TURNI_VITTORIA,
+    probabilitaDifficolta,
+    tiraCaso,
     nuovaBibbia,
     sanificaBibbia,
     sanificaPalette,
@@ -1133,6 +1312,7 @@
     statoCompatto,
     bibbiaCompatta,
     applicaEffetti,
+    aggiornaSvgOggetto,
     validaRispostaAI,
     comando,
     sanificaAspetto,
@@ -1141,6 +1321,7 @@
     ASPETTO,
     riassuntoCambi,
     elencoNomi,
+    comandoInformativo,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = Motore;

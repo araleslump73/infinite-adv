@@ -176,9 +176,19 @@
         (s.valuta || "USD")
       : "costo n/d";
 
-    el.textContent = "Token totali " + token + " · " + (costoValido ? "~" : "") + costo;
+    let cache = "";
+    if (Number.isFinite(s.tokenIngressoCacheHit)) {
+      const hit = new Intl.NumberFormat("it-IT").format(s.tokenIngressoCacheHit);
+      cache = " · input in cache " + (s.tokenIngressoCacheNonRilevata
+        ? (s.tokenIngressoCacheHit > 0 ? "almeno " + hit : "n/d")
+        : hit);
+    }
+    el.textContent = "Token totali " + token + cache + " · " + (costoValido ? "~" : "") + costo;
     el.title =
-      "Totale dall'avvio del server. Costo indicativo con le tariffe configurate, senza sconti cache." +
+      (AI.info.modalita === "firebase" ? "Totale salvato in questo browser." : "Totale dall'avvio del server.") +
+      " Costo indicativo con le tariffe configurate; non considera le fasce orarie del provider." +
+      (s.cacheScontata ? " Include lo sconto sui token in cache rilevati." : " Nessuno sconto cache applicato.") +
+      (s.tokenIngressoCacheNonRilevata ? " Input senza dettaglio cache stimato a prezzo pieno." : "") +
       (s.tokenSenzaRipartizione
         ? " Alcuni token non hanno il dettaglio ingresso/uscita."
         : "") +
@@ -705,7 +715,12 @@
   function applicaRisposta(risposta, comando, latenzaMs) {
     const luogoPrima = S.stato.luogo;
     const esito = Motore.applicaEffetti(S.stato, risposta.effetti);
-    const testo = (risposta.narrazione || "").trim() || "Il mondo resta in silenzio, come se aspettasse.";
+    // le azioni incerte hanno due finali: il motore mostra quello uscito dal dado
+    const testo =
+      [risposta.narrazione, esito.aggiunta]
+        .map((t) => String(t || "").trim())
+        .filter(Boolean)
+        .join(" ") || "Il mondo resta in silenzio, come se aspettasse.";
     Suoni.turno({
       comando,
       narrazione: testo,
@@ -740,8 +755,43 @@
         },
       })
     );
+    if (!S.stato.finito) generaSvgOggetti(esito.oggettiTrovati);
 
     if (S.stato.finito) mostraFine();
+  }
+
+  function generaSvgOggetti(trovati) {
+    if (!S.ai || AI.livello === "testo" || !Array.isArray(trovati) || !trovati.length) return;
+    for (const trovato of trovati) {
+      const oggetto = trovato.oggetto;
+      const luogo = S.stato.luoghi[trovato.idLuogo];
+      if (!luogo || !luogo.oggetti.includes(oggetto)) continue;
+      AI.svgOggetto({
+        livello: AI.livello,
+        nome: oggetto.nome,
+        descrizione: oggetto.descrizione,
+        tono: S.bibbia && S.bibbia.tono,
+        palette: S.bibbia && S.bibbia.palette,
+      }).then((risposta) => {
+        aggiornaStatisticheAI();
+        if (!risposta || typeof risposta.svg !== "string") {
+          logSistema(`La grafica di ${oggetto.nome} non è disponibile; il ritrovamento resta valido.`);
+          return;
+        }
+        if (!Motore.aggiornaSvgOggetto(S.stato, trovato.idLuogo, oggetto, risposta.svg)) {
+          const luogo = S.stato && S.stato.luoghi[trovato.idLuogo];
+          if (luogo && luogo.oggetti.includes(oggetto)) {
+            logSistema(`La grafica di ${oggetto.nome} non è valida; il ritrovamento resta valido.`);
+          }
+          return;
+        }
+        autosalva();
+        if (S.stato.luogo === trovato.idLuogo) document.dispatchEvent(new CustomEvent("asset-svg"));
+      }).catch((e) => {
+        console.warn("[grafica oggetto] generazione fallita:", e.message);
+        logSistema(`La grafica di ${oggetto.nome} non è disponibile; il ritrovamento resta valido.`);
+      });
+    }
   }
 
   function mostraFine() {
@@ -776,7 +826,7 @@
     // risposta del motore locale: pronta subito, è la rete di sicurezza
     const locale = Motore.comando(cmd, S.stato, S.bibbia);
 
-    if (!S.ai) {
+    if (!S.ai || Motore.comandoInformativo(cmd)) {
       applicaRisposta(locale, cmd, 0);
       S.inCorso = false;
       if (!S.stato.finito) abilitaComandi(true);

@@ -30,67 +30,18 @@ const MIME = {
   ".md": "text/plain; charset=utf-8",
 };
 
-const statistiche = {
-  chiamate: 0,
-  errori: 0,
-  msTotale: 0,
-  tokenTotali: 0,
-  tokenIngresso: 0,
-  tokenUscita: 0,
-  tokenSenzaRipartizione: 0,
-  chiamateSenzaUso: 0,
-};
+const statistiche = ponte.nuoveStatistiche();
 
 function cfg() {
   return ponte.configurazione(RADICE);
 }
 
 function registraUso(uso) {
-  if (!uso || typeof uso !== "object") {
-    statistiche.chiamateSenzaUso++;
-    return;
-  }
-  const ingresso = uso.prompt_tokens;
-  const uscita = uso.completion_tokens;
-  const dettagliValidi =
-    Number.isFinite(ingresso) && ingresso >= 0 && Number.isFinite(uscita) && uscita >= 0;
-  const totaleUso = uso.total_tokens;
-  const totaleValido = Number.isFinite(totaleUso) && totaleUso >= 0;
-  if (!dettagliValidi && !totaleValido) {
-    statistiche.chiamateSenzaUso++;
-    return;
-  }
-
-  if (dettagliValidi) {
-    statistiche.tokenIngresso += ingresso;
-    statistiche.tokenUscita += uscita;
-  }
-  if (totaleValido) {
-    statistiche.tokenTotali += totaleUso;
-    if (!dettagliValidi) statistiche.tokenSenzaRipartizione += totaleUso;
-  } else if (dettagliValidi) {
-    statistiche.tokenTotali += ingresso + uscita;
-  }
+  ponte.registraUso(statistiche, uso);
 }
 
 function datiStatistiche() {
-  const prezzi = cfg().costoTokenPerMilione;
-  const costoStimato =
-    prezzi && statistiche.tokenSenzaRipartizione === 0 && statistiche.chiamateSenzaUso === 0
-      ? (statistiche.tokenIngresso * prezzi.input + statistiche.tokenUscita * prezzi.output) / 1_000_000
-      : null;
-  return {
-    chiamate: statistiche.chiamate,
-    errori: statistiche.errori,
-    msMedio: statistiche.chiamate ? Math.round(statistiche.msTotale / statistiche.chiamate) : 0,
-    tokenTotali: statistiche.tokenTotali,
-    tokenIngresso: statistiche.tokenIngresso,
-    tokenUscita: statistiche.tokenUscita,
-    tokenSenzaRipartizione: statistiche.tokenSenzaRipartizione,
-    chiamateSenzaUso: statistiche.chiamateSenzaUso,
-    costoStimato,
-    valuta: prezzi ? prezzi.valuta : null,
-  };
+  return ponte.riepilogoStatistiche(statistiche, cfg().costoTokenPerMilione);
 }
 
 function statoAI() {
@@ -223,6 +174,28 @@ async function turno(corpo) {
   }
 }
 
+async function svgOggetto(corpo) {
+  const conf = cfg();
+  if (!conf.attivo) return { fonte: "locale", motivo: "AI non configurata" };
+  if (statistiche.chiamate >= MAX_CHIAMATE) {
+    return { fonte: "locale", motivo: "limite di chiamate AI raggiunto per questa sessione" };
+  }
+  try {
+    const r = await ponte.generaSvgOggetto(corpo, conf);
+    if (r.chiamata) {
+      statistiche.chiamate++;
+      statistiche.msTotale += r.chiamata.ms;
+      registraUso(r.chiamata.usage);
+    }
+    if (r.errore) statistiche.errori++;
+    return r.risposta;
+  } catch (e) {
+    statistiche.errori++;
+    console.warn("[grafica oggetto] AI non disponibile:", e.message);
+    return { fonte: "locale", motivo: e.message.slice(0, 200) };
+  }
+}
+
 // ----------------------------------------------------------- server
 const server = http.createServer(async (req, res) => {
   const url = (req.url || "/").split("?")[0];
@@ -242,14 +215,15 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, datiStatistiche());
   }
 
-  if (req.method === "POST" && (url === "/api/turno" || url === "/api/nuovo-gioco")) {
+  if (req.method === "POST" && (url === "/api/turno" || url === "/api/nuovo-gioco" || url === "/api/svg-oggetto")) {
     let corpo;
     try {
       corpo = await leggiCorpo(req);
     } catch (e) {
       return json(res, 400, { errore: e.message });
     }
-    const risposta = url === "/api/turno" ? await turno(corpo) : await nuovoGioco(corpo);
+    const risposta =
+      url === "/api/turno" ? await turno(corpo) : url === "/api/svg-oggetto" ? await svgOggetto(corpo) : await nuovoGioco(corpo);
     return json(res, 200, risposta);
   }
 
@@ -281,4 +255,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, turno, nuovoGioco, statistiche, registraUso, datiStatistiche };
+module.exports = { server, turno, nuovoGioco, svgOggetto, statistiche, registraUso, datiStatistiche };

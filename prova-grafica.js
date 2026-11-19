@@ -357,6 +357,50 @@ console.log("\n7. scena completa: 6 ambienti, elementi, aree cliccabili");
   const b = Modello.creaModello(stato, { genere: "mistero" });
   controlla("stessa stanza = stesso modello", JSON.stringify(a) === JSON.stringify(b));
 
+  // ciò che il motore toglie dallo stato sparisce anche dalla scena disegnata
+  const statoRimozione = stanza("caverna", "prova rimozione");
+  const Moto = require("./motore.js");
+  const prima = Modello.creaModello(statoRimozione, { genere: "fantasy" }).elementi.map((e) => e.nome);
+  Moto.applicaEffetti(statoRimozione, [{ op: "rimuovi", png: "figura incappucciata" }]);
+  const dopo = Modello.creaModello(statoRimozione, { genere: "fantasy" }).elementi.map((e) => e.nome);
+  controlla(
+    "creatura rimossa dallo stato: non è più nel modello",
+    prima.includes("figura incappucciata") && !dopo.includes("figura incappucciata"),
+    { prima, dopo }
+  );
+
+  // ciò che il dado fa trovare entra nello stato e la scena lo disegna
+  const statoTrovato = stanza("caverna", "prova ritrovamento");
+  let nomeTrovato = "lanterna";
+  for (let i = 0; i < 1000; i++) {
+    const candidato = "lanterna " + i;
+    const seme = [statoTrovato.turno, statoTrovato.luogo, candidato.toLowerCase(), 0].join("|");
+    if (Moto.rng(seme)() < Moto.probabilitaDifficolta("facile")) {
+      nomeTrovato = candidato;
+      break;
+    }
+  }
+  Moto.applicaEffetti(statoTrovato, [
+    { op: "cerca", difficolta: "facile", oggetto: { nome: nomeTrovato, descrizione: "Utile." } },
+  ]);
+  const conTrovato = Modello.creaModello(statoTrovato, { genere: "fantasy" });
+  controlla(
+    "oggetto trovato dal dado: compare nel modello",
+    conTrovato.elementi.some((e) => e.nome === nomeTrovato),
+    conTrovato.elementi.map((e) => e.nome)
+  );
+
+  // il nemico ferito mostra la barra vita proporzionale
+  const registroBarra = [];
+  const ctxBarra = ctxFinto(registroBarra);
+  Disegno.disegnaBarraVita(ctxBarra, 100, 200, 60, 1, 3);
+  const barre = registroBarra.filter((r) => r[0] === "fillRect");
+  controlla(
+    "barra vita proporzionale al danno",
+    barre.length === 2 && Math.abs(barre[0][3] - 33) < 0.001 && Math.abs(barre[1][3] - 11) < 0.001,
+    barre
+  );
+
   const P2 = Penna(ctxFinto(), { larghezza: 960, altezza: 540 });
   Disegno.disegnaMappa(P2, stato, 810, 12, 120, 86);
   controlla("mini-mappa disegnata senza errori", P2.errori.length === 0 && P2.chiamate >= 1);

@@ -133,6 +133,16 @@
     return { uscite: sfondo.uscite, elementi: areeElementi };
   }
 
+  // barra vita dei nemici feriti: il danno subito si vede anche in scena
+  function disegnaBarraVita(ctx, x, y, larghezzaElemento, vita, vitaMax) {
+    const larg = Math.max(24, larghezzaElemento * 0.55);
+    const quota = Math.max(0, Math.min(1, vita / Math.max(1, vitaMax)));
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(x - larg / 2, y, larg, 4);
+    ctx.fillStyle = "#d25560";
+    ctx.fillRect(x - larg / 2, y, larg * quota, 4);
+  }
+
   function disegnaElementiSvg(ctx, cam, mod, t, opzioni) {
     const aree = [];
     const o = opzioni || {};
@@ -171,6 +181,9 @@
         } else {
           ctx.drawImage(immagine, area.x, area.y, area.w, area.h);
         }
+      }
+      if (el.genere === "creatura" && el.ostile && el.vita != null && el.vita > 0 && el.vita < el.vitaMax) {
+        disegnaBarraVita(ctx, x, area.y - Math.max(6, altezza * 0.05), larghezza, el.vita, el.vitaMax);
       }
       aree.push(area);
     }
@@ -212,6 +225,7 @@
     disegnaAtmosfera,
     disegnaScena,
     disegnaElementiSvg,
+    disegnaBarraVita,
     disegnaMappa,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = Disegno;

@@ -256,16 +256,17 @@
       if (!codice) codice = (await chiediCodice()) ? "verificato" : "";
       if (!codice) throw new Error("Serve un codice invito valido per leggere la chiave AI.");
 
-      const chiaveSnap = await database.ref("avventuraAI/deepseek/apiKey").once("value");
+      const chiaveSnap = await database.ref("avventuraai/deepseek/apikey").once("value");
       const chiave = chiaveSnap.val();
       if (typeof chiave !== "string" || !chiave.trim()) {
-        throw new Error("Chiave AI non configurata in Firebase: avventuraAI/deepseek/apiKey.");
+        throw new Error("Chiave AI non configurata in Firebase: avventuraai/deepseek/apikey.");
       }
       const cfgAI = Ponte.configurazione({
         provider: "deepseek",
         modello: "deepseek-flash",
         chiave: chiave.trim(),
         ragionamento: false,
+        effort: "low",
       });
       if (!cfgAI.attivo) throw new Error("Configurazione AI incompleta in Firebase.");
       configurazioneAI = cfgAI;
@@ -307,21 +308,7 @@
   }
 
   function chiaveCache(dati) {
-    const s = dati.stato || {};
-    const l = s.luogo || {};
-    const g = s.giocatore || {};
-    return JSON.stringify([
-      String(dati.comando || "").toLowerCase().trim(),
-      dati.livello,
-      l.id,
-      l.ritocchi,
-      l.nome,
-      l.oggetti,
-      l.png,
-      g.vita,
-      g.energia,
-      g.inventario,
-    ]);
+    return JSON.stringify(dati);
   }
 
   function daCache(chiave) {
@@ -404,6 +391,41 @@
     }
   }
 
+  async function svgOggetto(dati) {
+    if (!info.ai) return null;
+    dati = Object.assign({ livello }, dati);
+    if (dati.livello === "testo") return null;
+    if (modalita === "firebase") {
+      try {
+        const esito = await Ponte.generaSvgOggetto(dati, configurazioneAI);
+        registraChiamata(esito);
+        if (!esito.risposta || esito.risposta.fonte !== "ai") {
+          registraEsito(false);
+          return null;
+        }
+        registraEsito(true);
+        return esito.risposta;
+      } catch (e) {
+        console.warn("[grafica oggetto] AI non disponibile:", e.message);
+        registraEsito(false);
+        return null;
+      }
+    }
+    try {
+      const r = await post("/api/svg-oggetto", dati, LIVELLI[dati.livello].turno);
+      if (!r || r.fonte !== "ai") {
+        registraEsito(false);
+        return null;
+      }
+      registraEsito(true);
+      return r;
+    } catch (e) {
+      console.warn("[grafica oggetto] AI non disponibile:", e.message);
+      registraEsito(false);
+      return null;
+    }
+  }
+
   root.AI = {
     LIVELLI,
     impostaLivello,
@@ -413,6 +435,7 @@
     inizializza,
     bibbia,
     turno,
+    svgOggetto,
     statistiche,
     info,
     get latenza() {
